@@ -233,6 +233,48 @@ PALACE_INTERPRETATIONS = {
     "父母宮": "與父母的緣分、學歷與文書印章運。顯示早年助力與學術表現。",
 }
 
+# ── 五行與方位對照 ────────────────────────────────────────────────────
+# 主星五行屬性（簡化版）
+STAR_ELEMENT = {
+    "紫微星": "土", "天機星": "木", "太陽星": "火", "武曲星": "金",
+    "天同星": "水", "廉貞星": "火", "天府星": "土", "太陰星": "水",
+    "貪狼星": "木", "巨門星": "水", "天相星": "水", "天梁星": "土",
+    "七殺星": "金", "破軍星": "水",
+}
+
+# 五行吉利方位
+ELEMENT_LUCKY_DIRECTION = {
+    "木": "東方（日出之方，事業/學習適用）",
+    "火": "南方（熱情之方，社交/表現適用）",
+    "土": "中央/東北方（穩重之方，儲蓄/靜養適用）",
+    "金": "西方（收斂之方，財務/整理適用）",
+    "水": "北方（智慧之方，思考/創作適用）",
+}
+
+# 五行代表色
+ELEMENT_COLOR = {
+    "木": "綠色系",
+    "火": "紅色/橙色系",
+    "土": "黃色/咖啡色系",
+    "金": "白色/金色系",
+    "水": "藍色/黑色系",
+}
+
+# 五行代表數
+ELEMENT_NUMBER = {
+    "木": "3、4",
+    "火": "7、9",
+    "土": "5、8",
+    "金": "6、9",
+    "水": "1、10",
+}
+
+# 需節制的星曜（易有麻煩）
+WARNING_STARS = ["七殺星", "破軍星", "貪狼星", "廉貞星"]
+
+# 吉利星曜
+LUCKY_STARS = ["紫微星", "天府星", "天梁星", "天機星", "天同星", "太陰星"]
+
 
 def analyze_combinations(all_stars: list[str]) -> list[str]:
     """分析重要星曜組合"""
@@ -549,12 +591,131 @@ def _judge_bushi(bushi_palace: str, bushi_stars: list[str],
 
 
 # ══════════════════════════════════════════════════════════════════════
-#  格式化輸出
+#  基本趨吉避凶建議（預設輸出）
 # ══════════════════════════════════════════════════════════════════════
 
+def generate_basic_advice(chart: dict, liuyue: dict = None, liuri: dict = None) -> dict:
+    """
+    根據命盤屬性，產生基本趨吉避凶建議（固定輸出，不需要用戶特別要求）
+    """
+    advice = {}
+
+    # ── 1. 吉利方位（根據命宮主星五行） ─────────────────────────────
+    life_palace_name = chart["summary"]["life_palace"]
+    life_stars = chart["palace_stars"].get(life_palace_name, [])
+    element = None
+    for star in life_stars:
+        if star in STAR_ELEMENT:
+            element = STAR_ELEMENT[star]
+            break
+    if element is None:
+        element = "土"  # 預設值
+
+    advice["lucky_direction"] = ELEMENT_LUCKY_DIRECTION.get(element, "中央")
+    advice["lucky_color"] = ELEMENT_COLOR.get(element, "暖色系")
+    advice["lucky_numbers"] = ELEMENT_NUMBER.get(element, "5、8")
+    advice["element"] = element
+
+    # ── 2. 本月重點提醒（根據流月） ────────────────────────────────
+    if liuyue:
+        st = liuyue.get("strength", {})
+        level = st.get("level", "平穩")
+        sihua = liuyue.get("sihua", {})
+
+        # 化忌宮位警告
+        avoid_palace = None
+        for transform, star in sihua.items():
+            if transform == "化忌":
+                avoid_palace = star
+
+        advice["this_month"] = {
+            "strength": level,
+            "ji": [],    # 化祿/化權帶來的機會
+            "avoid": [], # 化忌帶來的警示
+        }
+
+        for transform, star in sihua.items():
+            if transform == "化祿":
+                advice["this_month"]["ji"].append(f"{transform}{star}降臨")
+            elif transform == "化權":
+                advice["this_month"]["ji"].append(f"有power掌控")
+            elif transform == "化科":
+                advice["this_month"]["ji"].append(f"有貴人扶")
+            elif transform == "化忌":
+                advice["this_month"]["avoid"].append(f"注意{star}相關事務")
+
+    # ── 3. 命盤警訊星曜 ────────────────────────────────────────────
+    all_stars = chart.get("all_stars", [])
+    warnings = []
+    for star in WARNING_STARS:
+        if star in all_stars:
+            warnings.append(star)
+    advice["caution_stars"] = warnings
+
+    # ── 4. 疾厄宮提醒 ──────────────────────────────────────────────
+    health_palace_stars = chart["palace_stars"].get("疾厄宮", [])
+    health_warn = []
+    if "廉貞星" in health_palace_stars:
+        health_warn.append("注意情緒波動對身體的影響")
+    if "破軍星" in health_palace_stars:
+        health_warn.append("勿過度勞累，注意意外")
+    if "七殺星" in health_palace_stars:
+        health_warn.append("注意肝膽方面")
+    advice["health_notes"] = health_warn
+
+    # ── 5. 整體叮嚀 ────────────────────────────────────────────────
+    # 根據命宮星曜給出簡單一句話
+    life_stars_names = [s for s in life_stars if s in MAIN_STARS]
+    if life_stars_names:
+        trait = MAIN_STARS.get(life_stars_names[0], {}).get("desc", "")
+        advice["life_motto"] = f"你的命宮有{life_stars_names[0]}，{trait}"
+    else:
+        advice["life_motto"] = "命盤以靜制動，保守穩健是根本"
+
+    return advice
+
+
+def format_basic_advice(advice: dict) -> str:
+    """將建議格式化為易讀文字"""
+    lines = []
+    lines.append("【🌟 基本趨吉避凶】")
+
+    # 吉利方位
+    elem = advice.get("element", "土")
+    lines.append(f"  🎯 吉利方位：{advice.get('lucky_direction', '中央')}")
+    lines.append(f"  🎨 幸運色：{advice.get('lucky_color', '暖色系')}")
+    lines.append(f"  🔢 幸運數：{advice.get('lucky_numbers', '5、8')}")
+
+    # 本月重點
+    this_month = advice.get("this_month")
+    if this_month:
+        level = this_month.get("strength", "平穩")
+        emoji = "🟢" if level in ("大旺", "小旺") else "🟡" if level == "平穩" else "🔴"
+        lines.append(f"  📅 本月整體：{emoji} {level}")
+        if this_month.get("ji"):
+            lines.append(f"     好運：{'；'.join(this_month['ji'])}")
+        if this_month.get("avoid"):
+            lines.append(f"     注意：{'；'.join(this_month['avoid'])}")
+
+    # 警訊星
+    cautions = advice.get("caution_stars", [])
+    if cautions:
+        cautions_text = "、".join(cautions)
+        lines.append(f"  ⚠️  命盤有{cautions_text}，遇到問題冷靜思考再行動")
+
+    # 健康叮嚀
+    health = advice.get("health_notes", [])
+    if health:
+        lines.append(f"  🏥 健康提醒：{health[0]}")
+
+    # 整體叮嚀
+    lines.append(f"\n  💬 小叮嚀：{advice.get('life_motto', '低調踏實，安穩前行')}")
+
+    return "\n".join(lines)
+
 def format_fortune(chart: dict, liuri: dict = None, liuyue: dict = None,
-                   bushi: dict = None) -> str:
-    """產生帶運勢的完整命盤報告"""
+                   bushi: dict = None, advice: dict = None) -> str:
+    """產生帶運勢的完整命盤報告（含基本趨吉避凶）"""
     lines = []
     lines.append("═" * 50)
     lines.append("     🌸 紫微斗數 命盤分析報告 🌸")
@@ -618,6 +779,12 @@ def format_fortune(chart: dict, liuri: dict = None, liuyue: dict = None,
         lines.append(f"  判斷：{st['level']}（{st['score']:+d}）")
         if st['notes']:
             lines.append(f"  指引：{'；'.join(st['notes'])}")
+
+    # 基本趨吉避凶建議
+    if advice:
+        lines.append(f"\n{'─' * 50}")
+        advice_text = format_basic_advice(advice)
+        lines.append(advice_text)
 
     lines.append(f"\n{'─' * 50}")
     lines.append("  命理僅供參考，自己的努力才是決定命運的關鍵 💪")
@@ -699,7 +866,7 @@ if __name__ == "__main__":
         print(format_fortune(chart))
         sys.exit(0)
 
-    # 全功能模式：本命盤 + 每日 + 每月
+    # 全功能模式：本命盤 + 每日 + 每月 + 基本建議
     if len(args) >= 4:
         year, month, day, hour, *rest = args
         gender = rest[0] if rest and rest[0] in ("male", "female") else "male"
@@ -707,7 +874,8 @@ if __name__ == "__main__":
         today = date.today()
         liuri = calculate_liuri(today, chart["summary"]["life_palace_index"], chart)
         liuyue = calculate_liuyue(today.year, today.month, chart["summary"]["life_palace_index"], chart)
+        advice = generate_basic_advice(chart, liuyue=liuyue, liuri=liuri)
         print(format_ascii_chart(chart))
         print()
-        print(format_fortune(chart, liuri=liuri, liuyue=liuyue))
+        print(format_fortune(chart, liuri=liuri, liuyue=liuyue, advice=advice))
         sys.exit(0)
